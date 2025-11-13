@@ -12,11 +12,44 @@ const api: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Enable cookies for CSRF
 });
+
+// Store CSRF token
+let csrfToken: string | null = null;
+
+/**
+ * Get CSRF token from server
+ */
+export const getCsrfToken = async (): Promise<string> => {
+  if (csrfToken) {
+    return csrfToken;
+  }
+
+  const response = await axios.get('/api/csrf-token', {
+    withCredentials: true,
+  });
+  csrfToken = response.data.csrf_token;
+  
+  if (!csrfToken) {
+    throw new Error('Failed to obtain CSRF token');
+  }
+  
+  return csrfToken;
+};
 
 // Request interceptor for error handling
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    // Add CSRF token to all state-changing requests
+    if (config.method && ['post', 'put', 'delete', 'patch'].includes(config.method.toLowerCase())) {
+      try {
+        const token = await getCsrfToken();
+        config.headers['X-CSRF-Token'] = token;
+      } catch (error) {
+        console.error('Failed to get CSRF token:', error);
+      }
+    }
     return config;
   },
   (error: AxiosError) => {

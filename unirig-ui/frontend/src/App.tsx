@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ErrorBoundary, Header, Footer } from './components/Layout';
 import { Modal, Button, NotificationProvider } from './components/Common';
 import { SettingsView } from './components/Settings';
+import { UploadView, JobsView } from './views';
 import { useSession } from './hooks/useSession';
 
 type View = 'upload' | 'jobs' | 'settings';
@@ -254,27 +255,11 @@ interface ViewRendererProps {
 }
 
 const ViewRenderer: React.FC<ViewRendererProps> = ({ view, sessionId }) => {
-  // Placeholder views - these will be replaced with actual components in later tasks
   switch (view) {
     case 'upload':
-      return (
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-2xl font-bold mb-4">Upload View</h2>
-          <p className="text-gray-600 mb-4">Session ID: {sessionId}</p>
-          <p className="text-gray-600">
-            Upload interface will be implemented here with drag-and-drop functionality.
-          </p>
-        </div>
-      );
+      return <UploadView sessionId={sessionId} />;
     case 'jobs':
-      return (
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-2xl font-bold mb-4">Jobs View</h2>
-          <p className="text-gray-600">
-            Job management interface will be implemented here.
-          </p>
-        </div>
-      );
+      return <JobsView sessionId={sessionId} />;
     case 'settings':
       return <SettingsView />;
     default:
