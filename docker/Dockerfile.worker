@@ -1,0 +1,57 @@
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+WORKDIR /app
+
+# Install Python 3.11 and system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    git \
+    wget \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.11 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+
+# Upgrade pip
+RUN python -m pip install --upgrade pip
+
+# Copy and install UniRig requirements
+COPY UniRig/requirements.txt /tmp/unirig-requirements.txt
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# Install UniRig dependencies
+RUN pip install --no-cache-dir -r /tmp/unirig-requirements.txt || true
+
+# Install spconv for CUDA 12.1
+RUN pip install --no-cache-dir spconv-cu120
+
+# Install torch_scatter and torch_cluster
+RUN pip install --no-cache-dir torch-scatter torch-cluster -f https://data.pyg.org/whl/torch-2.3.0+cu121.html
+
+# Force numpy version
+RUN pip install --no-cache-dir numpy==1.26.4
+
+# Install backend dependencies (needed for Celery tasks)
+COPY unirig-ui/backend/requirements.txt /tmp/backend-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/backend-requirements.txt
+
+# Copy UniRig source code
+COPY UniRig /app/UniRig
+
+# Copy backend application (for task definitions)
+COPY unirig-ui/backend/app ./app
+
+# Create necessary directories
+RUN mkdir -p /app/uploads /app/results
+
+# Set environment variables
+ENV PYTHONPATH=/app:/app/UniRig
+ENV TORCH_HOME=/root/.cache/torch
+
+CMD ["celery", "-A", "app.tasks.celery_app", "worker", "--loglevel=info", "--concurrency=1"]

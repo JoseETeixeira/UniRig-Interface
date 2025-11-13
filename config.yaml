@@ -1,0 +1,19 @@
+system:
+  python_version: "3.11"
+  cuda_version: "12.1"
+  gpu_available: true
+
+paths:
+  project_root: "/app"
+  model_checkpoint: "/root/.cache/huggingface/hub"
+  upload_dir: "/app/uploads"
+  results_dir: "/app/results"
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+
+celery:
+  broker_url: "redis://redis:6379/0"
+  result_backend: "redis://redis:6379/0"

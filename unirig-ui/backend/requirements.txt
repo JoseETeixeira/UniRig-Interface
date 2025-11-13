@@ -1,0 +1,43 @@
+# UniRig UI Backend Dependencies
+# Python 3.11 compatible versions
+
+# Web Framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Async File Operations
+aiofiles==23.2.1
+
+# Background Job Processing
+celery==5.3.6
+redis==5.0.1
+
+# Database ORM
+sqlalchemy==2.0.27
+
+# Data Validation
+pydantic==2.6.1
+pydantic-settings==2.1.0
+
+# Configuration
+pyyaml==6.0.1
+
+# HTTP Client (for internal API calls if needed)
+httpx==0.26.0
+
+# HTTP Requests (for model downloads)
+requests==2.31.0
+
+# Security
+python-magic==0.4.27
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov==4.1.0
+
+# Development Tools
+black==24.1.1
+flake8==7.0.0
+mypy==1.8.0
