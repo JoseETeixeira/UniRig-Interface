@@ -4,6 +4,7 @@ Handles 3D model uploads with validation and session management.
 """
 
 import uuid
+import logging
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -14,8 +15,10 @@ from app.services.job_service import JobService
 from app.services.session_service import SessionService
 from app.models.job import Job
 from app.utils.errors import FileValidationError, FileSizeExceededError
+from app.tasks.skeleton_task import generate_skeleton
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -86,11 +89,24 @@ async def upload_file(
             file_path=file_path
         )
         
+        # Trigger skeleton generation task
+        logger.info(f"Triggering skeleton generation for job {job.job_id}")
+        generate_skeleton.delay(job_id=job.job_id, input_file=file_path)
+        
         return job
         
     except FileValidationError as e:
+        logger.error(f"File validation failed: {e}")
         raise HTTPException(status_code=400, detail=e.to_dict())
     except FileSizeExceededError as e:
+        logger.error(f"File size exceeded: {e}")
         raise HTTPException(status_code=413, detail=e.to_dict())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception(f"Upload failed with error: {e}")
+        raise HTTPException(status_code=500, detail={
+            "error": {
+                "code": "UPLOAD_FAILED",
+                "message": str(e),
+                "type": type(e).__name__
+            }
+        })

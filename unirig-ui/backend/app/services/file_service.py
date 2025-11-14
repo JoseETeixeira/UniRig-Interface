@@ -25,6 +25,7 @@ ALLOWED_MIME_TYPES = {
     "application/octet-stream",  # FBX files
     "model/vrm",
     "model/gltf+json",
+    "text/plain",  # OBJ files are often detected as plain text
 }
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 CHUNK_SIZE = 8192  # 8KB chunks for async file writing
@@ -71,24 +72,33 @@ class FileService:
         Raises:
             SecurityError: If MIME type is not allowed or file is executable
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
             mime = magic.Magic(mime=True)
             file_mime_type = mime.from_file(file_path)
             
+            logger.info(f"Detected MIME type: {file_mime_type} for file: {file_path}")
+            
             # Reject executable files
             if 'executable' in file_mime_type or 'script' in file_mime_type:
+                logger.error(f"Rejected executable file: {file_mime_type}")
                 raise SecurityError(f"Executable files are not allowed: {file_mime_type}")
             
-            # Check against allowed MIME types (relaxed for binary formats)
-            # Accept if it's a generic binary or matches known 3D formats
-            if file_mime_type not in ALLOWED_MIME_TYPES and not file_mime_type.startswith('application/'):
+            # Check against allowed MIME types
+            if file_mime_type not in ALLOWED_MIME_TYPES:
+                logger.error(f"MIME type not in allowed list: {file_mime_type}")
+                logger.info(f"Allowed MIME types: {ALLOWED_MIME_TYPES}")
                 raise SecurityError(f"File type not allowed: {file_mime_type}")
             
+            logger.info(f"MIME type validation passed for: {file_mime_type}")
             return True
             
         except Exception as e:
             if isinstance(e, SecurityError):
                 raise
+            logger.exception(f"MIME type validation failed with exception: {e}")
             raise SecurityError(f"MIME type validation failed: {str(e)}")
     
     @staticmethod

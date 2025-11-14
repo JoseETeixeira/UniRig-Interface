@@ -3,13 +3,15 @@ Database connection and initialization for SQLite.
 Provides SQLAlchemy engine, session factory, and database initialization.
 """
 
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pathlib import Path
 
-# SQLite database file location
-DATABASE_URL = "sqlite:///./unirig_ui.db"
+# SQLite database file location (use env var if available, otherwise default)
+DATABASE_PATH = os.getenv("DATABASE_PATH", "./unirig_ui.db")
+DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
 # Create SQLAlchemy engine
 engine = create_engine(

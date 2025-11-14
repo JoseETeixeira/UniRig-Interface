@@ -22,21 +22,9 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         self.safe_methods = {"GET", "HEAD", "OPTIONS"}
     
     async def dispatch(self, request: Request, call_next):
-        # Skip CSRF check for safe methods
+        # Skip CSRF check for safe methods (GET, HEAD, OPTIONS)
         if request.method in self.safe_methods:
             response = await call_next(request)
-            
-            # Add CSRF token to response cookie for future requests
-            if "csrf_token" not in request.cookies:
-                csrf_token = secrets.token_urlsafe(32)
-                response.set_cookie(
-                    key="csrf_token",
-                    value=csrf_token,
-                    httponly=True,
-                    secure=False,  # Set to True in production with HTTPS
-                    samesite="lax"
-                )
-            
             return response
         
         # For state-changing requests (POST, PUT, DELETE), validate CSRF token

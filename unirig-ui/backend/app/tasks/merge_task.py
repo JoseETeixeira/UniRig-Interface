@@ -91,7 +91,8 @@ def merge_rigging(self, job_id: str, skeleton_file: str, skin_file: str, origina
         output_file = output_dir / f"{job_id}_rigged.glb"
         
         # Build command for merge operation
-        unirig_root = Path(__file__).parent.parent.parent.parent / "UniRig"
+        # UniRig is mounted at /app/UniRig in the worker container
+        unirig_root = Path("/app/UniRig")
         
         cmd = [
             "bash",

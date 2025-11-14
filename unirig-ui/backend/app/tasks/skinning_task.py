@@ -86,7 +86,8 @@ def generate_skinning(self, job_id: str, skeleton_file: str):
         output_file = output_dir / f"{job_id}_skin.fbx"
         
         # Build command for skinning generation
-        unirig_root = Path(__file__).parent.parent.parent.parent / "UniRig"
+        # UniRig is mounted at /app/UniRig in the worker container
+        unirig_root = Path("/app/UniRig")
         
         cmd = [
             "bash",

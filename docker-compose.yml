@@ -28,10 +28,12 @@ services:
       - ./results:/app/results
       - ./config.yaml:/app/config.yaml:ro
       - model_cache:/root/.cache/huggingface
+      - db_data:/app/db_data
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_PATH=/app/db_data/unirig_ui.db
     depends_on:
       redis:
         condition: service_healthy
@@ -51,12 +53,13 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./results:/app/results
-      - ./UniRig:/app/UniRig:ro
       - model_cache:/root/.cache/huggingface
+      - db_data:/app/db_data
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_PATH=/app/db_data/unirig_ui.db
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     depends_on:
@@ -96,6 +99,7 @@ services:
 volumes:
   redis_data:
   model_cache:
+  db_data:
 
 networks:
   unirig-network:

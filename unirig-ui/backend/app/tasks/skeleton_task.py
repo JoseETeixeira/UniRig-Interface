@@ -88,8 +88,8 @@ def generate_skeleton(self, job_id: str, input_file: str, seed: int = 42):
         output_file = output_dir / f"{job_id}_skeleton.fbx"
         
         # Build command for skeleton generation
-        # Path to UniRig root (3 levels up from app/tasks/)
-        unirig_root = Path(__file__).parent.parent.parent.parent / "UniRig"
+        # UniRig is mounted at /app/UniRig in the worker container
+        unirig_root = Path("/app/UniRig")
         
         cmd = [
             "bash",

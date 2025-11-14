@@ -100,9 +100,13 @@ export const uploadFile = async (
     formData.append('session_id', sessionId);
   }
 
+  // Get CSRF token before upload
+  const token = await getCsrfToken();
+
   const response = await api.post<UploadResponse>('/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
+      'X-CSRF-Token': token, // Explicitly add CSRF token for multipart uploads
     },
     onUploadProgress: (progressEvent) => {
       if (progressEvent.total && onProgress) {
