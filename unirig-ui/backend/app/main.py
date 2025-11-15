@@ -6,7 +6,7 @@ Initializes the API server with middleware, routers, and database.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, upload, jobs, download, sessions, csrf
+from app.api import health, upload, jobs, download, sessions, csrf, downloads
 from app import diagnostics
 from app.db.database import init_db
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -69,6 +69,7 @@ app.include_router(csrf.router, prefix="/api", tags=["CSRF"])
 app.include_router(upload.router, prefix="/api", tags=["Upload"])
 app.include_router(jobs.router, prefix="/api", tags=["Jobs"])
 app.include_router(download.router, prefix="/api", tags=["Download"])
+app.include_router(downloads.router, tags=["Downloads"])
 app.include_router(diagnostics.router, prefix="/api", tags=["Diagnostics"])
 app.include_router(sessions.router, prefix="/api", tags=["Sessions"])
 

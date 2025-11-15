@@ -2,3 +2,4 @@
 export { JobList } from './JobList';
 export { JobCard } from './JobCard';
 export { JobProgress } from './JobProgress';
+export { JobDetailsPanel } from './JobDetailsPanel';

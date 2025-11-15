@@ -75,6 +75,11 @@ class Job(Base):
     skin_file = Column(String, nullable=True)
     final_file = Column(String, nullable=True)
     
+    # Model metadata
+    vertex_count = Column(Integer, nullable=True)
+    bone_count = Column(Integer, nullable=True)
+    file_format = Column(String, nullable=True)
+    
     # Relationship to session
     session = relationship("Session", back_populates="jobs")
     

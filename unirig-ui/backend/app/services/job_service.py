@@ -4,13 +4,15 @@ Handles CRUD operations for jobs using SQLAlchemy ORM.
 """
 
 import uuid
+import trimesh
+from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.db.models import Job as JobModel
-from app.models.job import Job, JobCreate, JobUpdate, JobStatus, JobStage, JobResults
+from app.models.job import Job, JobCreate, JobUpdate, JobStatus, JobStage, JobResults, ResultFiles, Metadata
 from app.utils.errors import JobNotFoundError
 
 
@@ -101,6 +103,7 @@ class JobService:
         """
         Update job fields.
         Automatically updates the updated_at timestamp.
+        When final_file is provided and job is completed, extracts metadata.
         
         Args:
             job_id: Job identifier
@@ -138,6 +141,14 @@ class JobService:
             db_job.skin_file = skin_file
         if final_file is not None:
             db_job.final_file = final_file
+            
+            # Extract metadata when job completes
+            if status == JobStatus.COMPLETED:
+                metadata = self._extract_metadata(final_file)
+                if metadata:
+                    db_job.vertex_count = metadata.get('vertex_count')
+                    db_job.bone_count = metadata.get('bone_count')
+                    db_job.file_format = metadata.get('format')
         
         # Update timestamp
         db_job.updated_at = datetime.utcnow()
@@ -261,6 +272,24 @@ class JobService:
         Returns:
             Pydantic Job model
         """
+        # Build resultFiles if final_file exists
+        result_files = None
+        if db_job.final_file or db_job.skeleton_file:
+            result_files = ResultFiles(
+                skeleton=db_job.skeleton_file,
+                rigged=db_job.final_file
+            )
+        
+        # Build metadata if any metadata fields exist
+        metadata = None
+        if any([db_job.vertex_count, db_job.bone_count, db_job.file_format]):
+            metadata = Metadata(
+                vertexCount=db_job.vertex_count,
+                boneCount=db_job.bone_count,
+                fileSize=Path(db_job.final_file).stat().st_size if db_job.final_file and Path(db_job.final_file).exists() else None,
+                format=db_job.file_format
+            )
+        
         return Job(
             job_id=db_job.job_id,
             session_id=db_job.session_id,
@@ -277,5 +306,53 @@ class JobService:
                 skeleton_file=db_job.skeleton_file,
                 skin_file=db_job.skin_file,
                 final_file=db_job.final_file
-            )
+            ),
+            resultFiles=result_files,
+            metadata=metadata
         )
+    
+    def _extract_metadata(self, file_path: str) -> Optional[dict]:
+        """
+        Extract metadata from FBX/GLB file.
+        
+        Args:
+            file_path: Path to model file
+            
+        Returns:
+            Dictionary with vertex_count, bone_count, format
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return None
+            
+            # Determine format from extension
+            file_format = path.suffix.upper().replace('.', '')
+            
+            # Load mesh using trimesh
+            mesh = trimesh.load(str(path))
+            
+            # Extract vertex count
+            vertex_count = 0
+            if isinstance(mesh, trimesh.Scene):
+                # For scenes, sum vertices from all geometries
+                for geom in mesh.geometry.values():
+                    if hasattr(geom, 'vertices'):
+                        vertex_count += len(geom.vertices)
+            elif hasattr(mesh, 'vertices'):
+                vertex_count = len(mesh.vertices)
+            
+            # Extract bone count (rough estimate from scene graph depth)
+            bone_count = 0
+            if isinstance(mesh, trimesh.Scene) and hasattr(mesh, 'graph'):
+                # Count nodes in scene graph as proxy for bones
+                bone_count = len(mesh.graph.nodes)
+            
+            return {
+                'vertex_count': vertex_count,
+                'bone_count': bone_count,
+                'format': file_format
+            }
+        except Exception as e:
+            print(f"Warning: Could not extract metadata from {file_path}: {e}")
+            return None

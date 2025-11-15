@@ -42,6 +42,20 @@ class JobResults(BaseModel):
     final_file: Optional[str] = Field(None, description="Path to final merged rigged model")
 
 
+class ResultFiles(BaseModel):
+    """URLs to result files for model viewer"""
+    skeleton: Optional[str] = Field(None, description="URL to skeleton FBX file")
+    rigged: Optional[str] = Field(None, description="URL to final rigged model")
+
+
+class Metadata(BaseModel):
+    """Model metadata extracted from result files"""
+    vertexCount: Optional[int] = Field(None, description="Number of vertices in the model")
+    boneCount: Optional[int] = Field(None, description="Number of bones in the skeleton")
+    fileSize: Optional[int] = Field(None, description="File size in bytes")
+    format: Optional[str] = Field(None, description="File format (FBX, GLB, etc.)")
+
+
 class Job(BaseModel):
     """
     Job data model for API responses.
@@ -59,6 +73,8 @@ class Job(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
     error_message: Optional[str] = Field(None, description="Error message if job failed")
     results: JobResults = Field(default_factory=JobResults, description="Generated result files")
+    resultFiles: Optional[ResultFiles] = Field(None, description="URLs to result files for model viewer")
+    metadata: Optional[Metadata] = Field(None, description="Model metadata")
     
     class Config:
         """Pydantic configuration."""

@@ -80,7 +80,7 @@ def generate_skeleton(self, job_id: str, input_file: str, seed: int = 42):
             job_id=job_id,
             status=JobStatus.PROCESSING,
             stage=JobStage.SKELETON,
-            progress=0.1
+            progress=0.3  # Extract phase complete, skeleton generation starting
         )
         
         # Prepare output directory
@@ -115,11 +115,11 @@ def generate_skeleton(self, job_id: str, input_file: str, seed: int = 42):
             
             # Update progress based on log output
             if "Loading model" in line or "loading model" in line.lower():
-                job_service.update_job(job_id=job_id, progress=0.3)
+                job_service.update_job(job_id=job_id, progress=0.4)
             elif "Processing mesh" in line or "processing" in line.lower():
                 job_service.update_job(job_id=job_id, progress=0.5)
             elif "Generating skeleton" in line or "generating" in line.lower():
-                job_service.update_job(job_id=job_id, progress=0.7)
+                job_service.update_job(job_id=job_id, progress=0.55)
         
         # Wait for process to complete
         process.wait()
@@ -146,7 +146,7 @@ def generate_skeleton(self, job_id: str, input_file: str, seed: int = 42):
             job_id=job_id,
             status=JobStatus.COMPLETED,
             stage=JobStage.SKELETON,
-            progress=1.0,
+            progress=0.6,  # Skeleton phase complete (60%)
             skeleton_file=str(output_file)
         )
         

@@ -32,6 +32,9 @@ requests==2.31.0
 # Security
 python-magic==0.4.27
 
+# 3D Model Processing
+trimesh==4.0.5
+
 # Testing
 pytest
 pytest-asyncio

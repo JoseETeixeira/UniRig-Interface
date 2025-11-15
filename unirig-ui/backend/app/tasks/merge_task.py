@@ -83,7 +83,7 @@ def merge_rigging(self, job_id: str, skeleton_file: str, skin_file: str, origina
             job_id=job_id,
             status=JobStatus.PROCESSING,
             stage=JobStage.MERGE,
-            progress=0.1
+            progress=0.8  # Skinning phase complete, merge starting
         )
         
         # Prepare output directory
@@ -119,11 +119,11 @@ def merge_rigging(self, job_id: str, skeleton_file: str, skin_file: str, origina
             
             # Update progress based on log output
             if "Loading" in line or "loading" in line.lower():
-                job_service.update_job(job_id=job_id, progress=0.3)
+                job_service.update_job(job_id=job_id, progress=0.85)
             elif "Merging" in line or "merging" in line.lower():
-                job_service.update_job(job_id=job_id, progress=0.6)
-            elif "Exporting" in line or "exporting" in line.lower():
                 job_service.update_job(job_id=job_id, progress=0.9)
+            elif "Exporting" in line or "exporting" in line.lower():
+                job_service.update_job(job_id=job_id, progress=0.95)
         
         # Wait for process to complete
         process.wait()

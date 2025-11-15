@@ -78,7 +78,7 @@ def generate_skinning(self, job_id: str, skeleton_file: str):
             job_id=job_id,
             status=JobStatus.PROCESSING,
             stage=JobStage.SKINNING,
-            progress=0.1
+            progress=0.6  # Skeleton phase complete, skinning starting
         )
         
         # Prepare output directory
@@ -112,13 +112,13 @@ def generate_skinning(self, job_id: str, skeleton_file: str):
             
             # Update progress based on log output
             if "Loading" in line or "loading" in line.lower():
-                job_service.update_job(job_id=job_id, progress=0.3)
+                job_service.update_job(job_id=job_id, progress=0.65)
             elif "Computing" in line or "computing" in line.lower():
-                job_service.update_job(job_id=job_id, progress=0.5)
-            elif "Generating" in line or "generating" in line.lower():
                 job_service.update_job(job_id=job_id, progress=0.7)
+            elif "Generating" in line or "generating" in line.lower():
+                job_service.update_job(job_id=job_id, progress=0.75)
             elif "Saving" in line or "saving" in line.lower():
-                job_service.update_job(job_id=job_id, progress=0.9)
+                job_service.update_job(job_id=job_id, progress=0.78)
         
         # Wait for process to complete
         process.wait()
@@ -145,7 +145,7 @@ def generate_skinning(self, job_id: str, skeleton_file: str):
             job_id=job_id,
             status=JobStatus.COMPLETED,
             stage=JobStage.SKINNING,
-            progress=1.0,
+            progress=0.8,  # Skinning phase complete (80%)
             skin_file=str(output_file)
         )
         

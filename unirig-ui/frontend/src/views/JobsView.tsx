@@ -1,5 +1,5 @@
-import React from 'react';
-import { JobList } from '../components/Jobs/JobList';
+import React, { useState } from 'react';
+import { JobList, JobDetailsPanel } from '../components/Jobs';
 
 interface JobsViewProps {
   sessionId: string | null;
@@ -9,6 +9,8 @@ interface JobsViewProps {
  * Jobs management view with filtering and monitoring
  */
 export const JobsView: React.FC<JobsViewProps> = ({ sessionId }) => {
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
   if (!sessionId) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -61,7 +63,20 @@ export const JobsView: React.FC<JobsViewProps> = ({ sessionId }) => {
       </div>
 
       {/* Job List */}
-      <JobList />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left: Job List */}
+        <div>
+          <JobList onJobSelect={setSelectedJobId} />
+        </div>
+
+        {/* Right: Job Details Panel */}
+        <div className="lg:sticky lg:top-6 lg:self-start">
+          <JobDetailsPanel
+            jobId={selectedJobId}
+            onClose={() => setSelectedJobId(null)}
+          />
+        </div>
+      </div>
 
       {/* Info Section */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
