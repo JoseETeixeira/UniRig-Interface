@@ -1,16 +1,19 @@
 import React, { Suspense, useState, useCallback, useRef, useEffect } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera, Grid, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Model } from './Model';
 import { SkeletonHelper } from './SkeletonHelper';
 import { ViewerControls } from './ViewerControls';
+import { AnimationPanel } from './AnimationPanel';
 import { detectWebGLSupport, getWebGLErrorMessage } from '../../utils/webgl-detect';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import type { Animation } from '../../types';
 
 interface ModelViewerProps {
   modelUrl?: string;
   modelFileSize?: number; // File size in bytes
+  jobId?: string; // Job ID for retargeting
   showGrid?: boolean;
   showSkeleton?: boolean;
   cameraPosition?: [number, number, number];
@@ -41,6 +44,34 @@ function LoadingIndicator({ progress }: { progress: number }) {
 }
 
 /**
+ * Animation updater component that runs in the Three.js render loop
+ * Updates the AnimationMixer every frame for smooth animation playback
+ */
+function AnimationUpdater({ 
+  mixerRef,
+  currentActionRef,
+  isPlaying,
+  onTimeUpdate 
+}: { 
+  mixerRef: React.MutableRefObject<THREE.AnimationMixer | null>;
+  currentActionRef: React.MutableRefObject<THREE.AnimationAction | null>;
+  isPlaying: boolean;
+  onTimeUpdate: (time: number) => void;
+}) {
+  useFrame((_state, delta) => {
+    if (mixerRef.current && isPlaying) {
+      mixerRef.current.update(delta);
+      
+      // Get current time from the active action
+      if (currentActionRef.current) {
+        onTimeUpdate(currentActionRef.current.time);
+      }
+    }
+  });
+  return null;
+}
+
+/**
  * Enhanced 3D model viewer component with FBX/GLB loading support
  * 
  * Features:
@@ -55,6 +86,7 @@ function LoadingIndicator({ progress }: { progress: number }) {
 export const ModelViewer: React.FC<ModelViewerProps> = ({
   modelUrl,
   modelFileSize,
+  jobId,
   showGrid = true,
   showSkeleton: showSkeletonProp = false,
   cameraPosition = [0, 1, 3],
@@ -71,8 +103,26 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({
   const [backgroundColor, setBackgroundColor] = useState('#1f2937');
   const [showLargeFileWarning, setShowLargeFileWarning] = useState(false);
   const [loadFullQuality, setLoadFullQuality] = useState(false);
+  const [animations, setAnimations] = useState<Animation[]>([]);
+  const [selectedAnimationId, setSelectedAnimationId] = useState<string | undefined>(undefined);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(() => {
+    // Load speed from localStorage, default to 1.0x
+    const saved = localStorage.getItem('animationPlaybackSpeed');
+    return saved ? parseFloat(saved) : 1.0;
+  });
+  const [isLooping, setIsLooping] = useState(() => {
+    // Load loop preference from localStorage, default to true
+    const saved = localStorage.getItem('animationLooping');
+    return saved ? saved === 'true' : true;
+  });
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const defaultCameraPosition = useRef(cameraPosition);
+  
+  // Animation system refs
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const currentActionRef = useRef<THREE.AnimationAction | null>(null);
 
   // Large file threshold: 50MB
   const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024; // 50MB in bytes
@@ -93,7 +143,25 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({
     setIsLoading(false);
     setLoadingError(null);
     setLoadedModel(model);
+    
+    // Create AnimationMixer for the loaded model
+    if (mixerRef.current) {
+      mixerRef.current.stopAllAction();
+    }
+    mixerRef.current = new THREE.AnimationMixer(model);
+    
+    // Clear animation state when new model loads
+    setAnimations([]);
+    setSelectedAnimationId(undefined);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    currentActionRef.current = null;
+    
+    // Clear persisted animation state (new model = new animations)
+    localStorage.removeItem('selectedAnimationId');
+    
     console.log('Model loaded successfully:', model);
+    console.log('AnimationMixer initialized');
   }, []);
 
   const handleModelError = useCallback((error: Error) => {
@@ -106,6 +174,50 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({
     setIsLoading(true);
     setLoadingProgress(progress);
   }, []);
+
+  // Handle animations loaded from model
+  const handleAnimationsLoaded = useCallback((clips: THREE.AnimationClip[]) => {
+    console.log(`Loaded ${clips.length} animation(s) from model`);
+    
+    // Convert Three.js AnimationClips to Animation objects with metadata
+    const parsedAnimations: Animation[] = clips.map((clip, index) => {
+      // Calculate frame count based on duration and typical frame rate (30 FPS)
+      const fps = 30;
+      const frameCount = Math.round(clip.duration * fps);
+      
+      return {
+        id: `anim-${index}-${Date.now()}`,
+        name: clip.name || `Animation ${index + 1}`,
+        duration: clip.duration,
+        frameCount: frameCount,
+        clip: clip,
+        source: 'embedded' as const,
+      };
+    });
+
+    setAnimations(parsedAnimations);
+    
+    // Restore selected animation from localStorage if available
+    // Note: We match by name instead of ID since IDs include timestamp
+    const savedAnimationId = localStorage.getItem('selectedAnimationId');
+    if (savedAnimationId) {
+      // Try to find animation with matching name
+      const matchingAnim = parsedAnimations.find(anim => 
+        anim.name === savedAnimationId || anim.id === savedAnimationId
+      );
+      if (matchingAnim) {
+        // Defer selection to allow state to settle
+        setTimeout(() => setSelectedAnimationId(matchingAnim.id), 0);
+      }
+    }
+    
+    // Notify parent component if callback provided
+    if (onAnimationsLoaded) {
+      onAnimationsLoaded(clips);
+    }
+    
+    console.log('Parsed animations:', parsedAnimations);
+  }, [onAnimationsLoaded]);
 
   const handleCameraReset = useCallback(() => {
     if (controlsRef.current) {
@@ -137,6 +249,228 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({
   const handleBackgroundChange = useCallback((color: string) => {
     setBackgroundColor(color);
   }, []);
+
+  // Playback control handlers
+  const handlePlay = useCallback(() => {
+    if (currentActionRef.current) {
+      currentActionRef.current.paused = false;
+      setIsPlaying(true);
+    }
+  }, []);
+
+  const handlePause = useCallback(() => {
+    if (currentActionRef.current) {
+      currentActionRef.current.paused = true;
+      setIsPlaying(false);
+    }
+  }, []);
+
+  const handleStop = useCallback(() => {
+    if (currentActionRef.current) {
+      currentActionRef.current.stop();
+      currentActionRef.current.reset();
+      setIsPlaying(false);
+      setCurrentTime(0);
+    }
+  }, []);
+
+  const handleSeek = useCallback((time: number) => {
+    if (currentActionRef.current && mixerRef.current) {
+      currentActionRef.current.time = time;
+      mixerRef.current.update(0); // Force update to show new pose
+      setCurrentTime(time);
+    }
+  }, []);
+
+  const handleTimeUpdate = useCallback((time: number) => {
+    setCurrentTime(time);
+  }, []);
+
+  const handleSpeedChange = useCallback((speed: number) => {
+    setPlaybackSpeed(speed);
+    
+    // Apply speed to current animation action
+    if (currentActionRef.current) {
+      currentActionRef.current.timeScale = speed;
+    }
+    
+    // Persist to localStorage
+    localStorage.setItem('animationPlaybackSpeed', speed.toString());
+    
+    console.log(`Playback speed changed to ${speed}x`);
+  }, []);
+
+  const handleLoopToggle = useCallback((loop: boolean) => {
+    setIsLooping(loop);
+    
+    // Apply loop setting to current animation action
+    if (currentActionRef.current) {
+      currentActionRef.current.loop = loop ? THREE.LoopRepeat : THREE.LoopOnce;
+      currentActionRef.current.clampWhenFinished = !loop; // Keep at last frame when not looping
+    }
+    
+    // Persist to localStorage
+    localStorage.setItem('animationLooping', loop.toString());
+    
+    console.log(`Animation looping ${loop ? 'enabled' : 'disabled'}`);
+  }, []);
+
+  const handleAnimationSelect = useCallback((animationId: string) => {
+    setSelectedAnimationId(animationId);
+    
+    // Find the selected animation
+    const selectedAnimation = animations.find(anim => anim.id === animationId);
+    if (!selectedAnimation || !mixerRef.current) {
+      console.warn('Cannot play animation: animation or mixer not found');
+      return;
+    }
+    
+    // Persist animation name (not ID, since IDs include timestamp)
+    localStorage.setItem('selectedAnimationId', selectedAnimation.name);
+    
+    // Stop current animation if playing (with optional fade out)
+    if (currentActionRef.current) {
+      // Crossfade for smoother transition (0.2 second fade)
+      currentActionRef.current.fadeOut(0.2);
+      currentActionRef.current.stop();
+    }
+    
+    // Create and play new animation action
+    const action = mixerRef.current.clipAction(selectedAnimation.clip);
+    action.reset();
+    action.timeScale = playbackSpeed; // Apply current speed
+    action.loop = isLooping ? THREE.LoopRepeat : THREE.LoopOnce; // Apply loop setting
+    action.clampWhenFinished = !isLooping; // Keep at last frame when not looping
+    
+    // Fade in new animation for smooth transition
+    action.fadeIn(0.2);
+    action.play();
+    
+    currentActionRef.current = action;
+    setIsPlaying(true);
+    setCurrentTime(0);
+    
+    console.log(`Switching to animation: ${selectedAnimation.name} (${selectedAnimation.duration.toFixed(2)}s) at ${playbackSpeed}x speed, loop: ${isLooping}`);
+  }, [animations, playbackSpeed, isLooping]);
+
+  // Handle retargeting completion - load retargeted animation file
+  const handleRetargetingComplete = useCallback(async (resultPath: string, motionName: string, retargetingJobId: string) => {
+    console.log('Loading retargeted animation:', { resultPath, motionName, retargetingJobId });
+    
+    try {
+      // Import FBXLoader dynamically
+      const { FBXLoader } = await import('three/addons/loaders/FBXLoader.js');
+      const loader = new FBXLoader();
+      
+      // Load the retargeted animation file
+      const fbx = await new Promise<THREE.Group>((resolve, reject) => {
+        loader.load(
+          resultPath,
+          (loadedFbx) => resolve(loadedFbx),
+          undefined, // onProgress
+          (error) => reject(error)
+        );
+      });
+      
+      // Extract animation clips from the loaded FBX
+      if (!fbx.animations || fbx.animations.length === 0) {
+        console.warn('No animations found in retargeted file');
+        return;
+      }
+      
+      // Get the first animation clip (should be the retargeted animation)
+      const retargetedClip = fbx.animations[0];
+      
+      // Create Animation object
+      const newAnimation: Animation = {
+        id: retargetingJobId,
+        name: motionName,
+        duration: retargetedClip.duration,
+        frameCount: Math.floor(retargetedClip.duration * 30), // Assume 30 FPS
+        clip: retargetedClip,
+        source: 'retargeted',
+        retargetingJobId: retargetingJobId,
+      };
+      
+      // Add to animations list
+      setAnimations(prev => [...prev, newAnimation]);
+      
+      // Auto-select and play the new animation
+      setTimeout(() => {
+        setSelectedAnimationId(newAnimation.id);
+        
+        if (mixerRef.current) {
+          // Stop current animation
+          if (currentActionRef.current) {
+            currentActionRef.current.fadeOut(0.2);
+            currentActionRef.current.stop();
+          }
+          
+          // Play retargeted animation
+          const action = mixerRef.current.clipAction(retargetedClip);
+          action.reset();
+          action.timeScale = playbackSpeed;
+          action.loop = isLooping ? THREE.LoopRepeat : THREE.LoopOnce;
+          action.clampWhenFinished = !isLooping;
+          action.fadeIn(0.2);
+          action.play();
+          
+          currentActionRef.current = action;
+          setIsPlaying(true);
+          setCurrentTime(0);
+          
+          console.log(`✅ Successfully loaded and playing retargeted animation: ${motionName}`);
+        }
+      }, 100); // Small delay to ensure state updates
+      
+    } catch (error) {
+      console.error('Failed to load retargeted animation:', error);
+      // Error is already shown in AnimationPanel via polling, so just log here
+    }
+  }, [playbackSpeed, isLooping]);
+
+  // Handle animation saved - update source to 'embedded'
+  const handleAnimationSaved = useCallback((animationId: string) => {
+    console.log('Animation saved, updating source to embedded:', animationId);
+    
+    setAnimations(prev => prev.map(anim => 
+      anim.id === animationId 
+        ? { ...anim, source: 'embedded' as const } 
+        : anim
+    ));
+  }, []);
+
+  // Clear animations when model URL changes
+  useEffect(() => {
+    // Stop and clean up current animation
+    if (currentActionRef.current) {
+      currentActionRef.current.stop();
+      currentActionRef.current = null;
+    }
+    
+    // Clean up mixer
+    if (mixerRef.current) {
+      mixerRef.current.stopAllAction();
+      mixerRef.current = null;
+    }
+    
+    setAnimations([]);
+    setSelectedAnimationId(undefined);
+    setLoadedModel(null);
+    setIsLoading(false);
+    setLoadingError(null);
+  }, [modelUrl]);
+
+  // Log animations when they change (for debugging)
+  useEffect(() => {
+    if (animations.length > 0) {
+      console.log(`ModelViewer: ${animations.length} animations available:`, animations.map(a => ({
+        name: a.name,
+        duration: a.duration.toFixed(2) + 's',
+        frames: a.frameCount
+      })));
+    }
+  }, [animations]);
 
   // Apply wireframe mode to loaded model
   useEffect(() => {
@@ -225,9 +559,11 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({
   }
 
   return (
-    <div className="w-full h-full min-h-[500px] bg-gray-900 rounded-lg overflow-hidden relative">
-      {/* Large File Warning Banner */}
-      {showLargeFileWarning && modelFileSize && (
+    <div className="w-full h-full min-h-[500px] flex flex-col gap-3">
+      {/* 3D Viewer */}
+      <div className="flex-1 min-h-[400px] bg-gray-900 rounded-lg overflow-hidden relative">
+        {/* Large File Warning Banner */}
+        {showLargeFileWarning && modelFileSize && (
         <div className="absolute top-0 left-0 right-0 z-50 bg-yellow-100 dark:bg-yellow-900 border-b-2 border-yellow-400 dark:border-yellow-600 p-4">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 text-yellow-600 dark:text-yellow-400">
@@ -273,6 +609,14 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({
       <Canvas shadows style={{ background: backgroundColor }}>
         {/* Camera */}
         <PerspectiveCamera makeDefault position={cameraPosition} fov={50} />
+        
+        {/* Animation updater - runs in render loop */}
+        <AnimationUpdater 
+          mixerRef={mixerRef} 
+          currentActionRef={currentActionRef}
+          isPlaying={isPlaying}
+          onTimeUpdate={handleTimeUpdate}
+        />
 
         {/* Lighting */}
         <ambientLight intensity={0.5 * lightingIntensity} />
@@ -331,7 +675,7 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({
               onLoad={handleModelLoad}
               onError={handleModelError}
               onProgress={handleProgress}
-              onAnimationsLoaded={onAnimationsLoaded}
+              onAnimationsLoaded={handleAnimationsLoaded}
               loadFullQuality={loadFullQuality}
             />
           )}
@@ -431,6 +775,31 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({
           backgroundColor={backgroundColor}
           onBackgroundChange={handleBackgroundChange}
         />
+      )}
+      </div>
+
+      {/* Animation Panel - Bottom Drawer */}
+      {!isLoading && !loadingError && animations.length > 0 && (
+        <div className="flex-shrink-0">
+          <AnimationPanel
+            jobId={jobId}
+            animations={animations}
+            selectedAnimationId={selectedAnimationId}
+            onAnimationSelect={handleAnimationSelect}
+            onRetargetingComplete={handleRetargetingComplete}
+            onAnimationSaved={handleAnimationSaved}
+            isPlaying={isPlaying}
+            currentTime={currentTime}
+            onPlay={handlePlay}
+            onPause={handlePause}
+            onStop={handleStop}
+            onSeek={handleSeek}
+            playbackSpeed={playbackSpeed}
+            onSpeedChange={handleSpeedChange}
+            isLooping={isLooping}
+            onLoopToggle={handleLoopToggle}
+          />
+        </div>
       )}
     </div>
   );

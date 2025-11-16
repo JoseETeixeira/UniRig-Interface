@@ -9,6 +9,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.db.database import get_db
+from app.db.models import MotionClip
 from app.services.job_service import JobService
 from app.services.file_service import FileService
 from app.models.job import Job, JobStatus
@@ -347,3 +348,141 @@ async def delete_job(
         
     except JobNotFoundError as e:
         raise HTTPException(status_code=404, detail=e.to_dict())
+
+
+class SaveAnimationRequest(BaseModel):
+    """Request model for saving a retargeted animation."""
+    retargetingJobId: str
+    animationName: Optional[str] = None
+
+
+class SaveAnimationResponse(BaseModel):
+    """Response model for save animation operation."""
+    message: str
+    modelPath: str
+    animationName: str
+
+
+@router.post("/jobs/{job_id}/save-animation", response_model=SaveAnimationResponse)
+async def save_retargeted_animation(
+    job_id: str,
+    request: SaveAnimationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Save a retargeted animation by merging it into the main model file.
+    
+    This endpoint takes a completed retargeting job and merges the retargeted
+    animation FBX file into the main rigged model file, making it permanently
+    available for download.
+    
+    Args:
+        job_id: Job identifier for the rigged model
+        request: Save animation request with retargetingJobId
+        db: Database session (injected)
+        
+    Returns:
+        SaveAnimationResponse: Confirmation with model path and animation name
+        
+    Raises:
+        HTTPException 404: Job or retargeting job not found
+        HTTPException 400: Retargeting job not completed
+        HTTPException 500: Error during merge operation
+        
+    Example:
+        POST /api/jobs/550e8400/save-animation
+        {
+            "retargetingJobId": "660e8400-e29b-41d4-a716-446655440001",
+            "animationName": "Walking Animation"
+        }
+        
+        Response:
+        {
+            "message": "Animation saved successfully",
+            "modelPath": "/results/session-id/job-id_final.fbx",
+            "animationName": "Walking Animation"
+        }
+    """
+    import os
+    from pathlib import Path
+    from app.db.models import RetargetingJob
+    from app.utils.fbx_merger import merge_animation_into_model
+    
+    try:
+        # Step 1: Validate job exists and is completed
+        job_service = JobService(db)
+        job = job_service.get_job(job_id)
+        
+        if job.status != JobStatus.COMPLETED:
+            raise HTTPException(
+                status_code=400,
+                detail="Job must be in completed status to save animations"
+            )
+        
+        if not job.final_file or not os.path.exists(job.final_file):
+            raise HTTPException(
+                status_code=404,
+                detail="Model file not found"
+            )
+        
+        # Step 2: Validate retargeting job exists and is completed
+        retargeting_job = db.query(RetargetingJob).filter(
+            RetargetingJob.id == request.retargetingJobId
+        ).first()
+        
+        if not retargeting_job:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Retargeting job {request.retargetingJobId} not found"
+            )
+        
+        if retargeting_job.status != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Retargeting job must be completed (current status: {retargeting_job.status})"
+            )
+        
+        if not retargeting_job.result_path or not os.path.exists(retargeting_job.result_path):
+            raise HTTPException(
+                status_code=404,
+                detail="Retargeted animation file not found"
+            )
+        
+        # Step 3: Determine animation name
+        animation_name = request.animationName
+        if not animation_name:
+            # Get motion clip name as fallback
+            motion_clip = db.query(MotionClip).filter(
+                MotionClip.id == retargeting_job.motion_clip_id
+            ).first()
+            animation_name = motion_clip.name if motion_clip else f"Animation_{retargeting_job.motion_clip_id}"
+        
+        # Step 4: Merge animation into model file
+        try:
+            merge_animation_into_model(
+                model_path=job.final_file,
+                animation_path=retargeting_job.result_path,
+                animation_name=animation_name
+            )
+        except Exception as merge_error:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to merge animation into model: {str(merge_error)}"
+            )
+        
+        # Step 5: Return success response
+        return SaveAnimationResponse(
+            message="Animation saved successfully",
+            modelPath=job.final_file,
+            animationName=animation_name
+        )
+        
+    except JobNotFoundError as e:
+        raise HTTPException(status_code=404, detail=e.to_dict())
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected error saving animation: {str(e)}"
+        )

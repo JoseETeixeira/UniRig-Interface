@@ -23,6 +23,7 @@ class PathsConfig(BaseModel):
     model_checkpoint: str
     upload_dir: str
     results_dir: str
+    motion_cache_dir: str = "/app/motion_cache"  # Motion dataset cache directory
 
 
 class ServerConfig(BaseModel):

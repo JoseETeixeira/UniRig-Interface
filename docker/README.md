@@ -25,6 +25,18 @@ This directory contains the Docker configuration for the UniRig UI application.
   - Celery for background task processing
   - GPU access for model inference
 
+### Dockerfile.dme-worker
+- **Base Image**: `nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04`
+- **Purpose**: GPU-enabled Celery worker for Deep Motion Editing (motion retargeting)
+- **Features**:
+  - Miniconda for environment management
+  - Python 3.11 conda environment
+  - PyTorch 2.3.1 with CUDA 11.8
+  - Deep Motion Editing repository integration
+  - Motion processing dependencies (NumPy, SciPy, trimesh)
+  - Dedicated Celery queue for retargeting tasks
+  - GPU access for accelerated motion retargeting
+
 ### Dockerfile.nginx
 - **Multi-stage Build**:
   1. **Stage 1**: Node 18 Alpine - Build React frontend
@@ -43,16 +55,20 @@ This directory contains the Docker configuration for the UniRig UI application.
 
 ## Docker Compose Services
 
-The `docker-compose.yml` in the root directory orchestrates 4 services:
+The `docker-compose.yml` in the root directory orchestrates 5 services:
 
 1. **redis**: Message broker for Celery (Redis 7 Alpine)
 2. **backend**: FastAPI application (port 8000)
-3. **worker**: GPU-enabled Celery worker
+3. **worker**: GPU-enabled Celery worker for UniRig processing
+4. **dme-worker**: GPU-enabled Celery worker for Deep Motion Editing (motion retargeting)
+5. **nginx**: Reverse proxy and static file server (port 80/443)
 4. **nginx**: Reverse proxy and frontend server (port 80/443)
 
 ### Volumes
 - `redis_data`: Persistent Redis data
 - `model_cache`: Hugging Face model checkpoints
+- `motion_cache`: Deep Motion Editing preprocessed motion dataset (~5-10GB)
+- `db_data`: SQLite database files
 - `./uploads`: User-uploaded 3D models (host-mounted)
 - `./results`: Generated rigging results (host-mounted)
 
@@ -66,7 +82,7 @@ All services have configured health checks for automatic recovery:
 - **nginx**: `curl /api/health` (proxied) every 30s
 
 ### GPU Configuration
-The worker service has GPU resource allocation:
+Both worker and dme-worker services have GPU resource allocation:
 ```yaml
 deploy:
   resources:
@@ -77,6 +93,9 @@ deploy:
           capabilities: [gpu]
 ```
 
+The `worker` service uses GPU for UniRig skeleton/skinning inference.
+The `dme-worker` service uses GPU for Deep Motion Editing retargeting operations.
+
 ## Building Images
 
 ```bash
@@ -86,6 +105,7 @@ docker compose build
 # Build specific service
 docker compose build backend
 docker compose build worker
+docker compose build dme-worker
 docker compose build nginx
 ```
 
@@ -110,8 +130,49 @@ docker compose down -v
 
 - Docker 24.0+
 - Docker Compose 2.20+
-- NVIDIA Container Toolkit (for GPU support)
-- NVIDIA GPU with CUDA 12.1 support
+- NVIDIA Container Toolkit (nvidia-docker2)
+- NVIDIA GPU with CUDA 11.8+ support (for dme-worker)
+- NVIDIA GPU with CUDA 12.1+ support (for worker)
+
+### Installing NVIDIA Container Toolkit
+
+```bash
+# Ubuntu/Debian
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+  sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+sudo apt-get update && sudo apt-get install -y nvidia-docker2
+sudo systemctl restart docker
+
+# Verify GPU access
+docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
+```
+
+## Deep Motion Editing Worker
+
+For detailed information about the DME worker service, see:
+- [Deep Motion Editing Setup Guide](./DME_SETUP.md) (comprehensive setup and troubleshooting)
+- Docker service: `dme-worker` in `docker-compose.yml`
+- Dockerfile: `docker/Dockerfile.dme-worker`
+
+### Quick Start DME Worker
+
+```bash
+# Build DME worker image
+docker compose build dme-worker
+
+# Start DME worker
+docker compose up -d dme-worker
+
+# Verify DME worker is running
+docker compose ps dme-worker
+docker compose logs -f dme-worker
+
+# Test GPU access
+docker compose exec dme-worker /bin/bash -c \
+  "source activate dme && python -c 'import torch; print(torch.cuda.is_available())'"
+```
 
 ## Design Alignment
 

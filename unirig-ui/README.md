@@ -172,7 +172,7 @@ docker compose down -v
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (or copy from `.env.example`):
 
 ```env
 # Redis Configuration
@@ -189,6 +189,35 @@ CELERY_LOG_LEVEL=info
 # Model Configuration
 HF_HOME=/root/.cache/huggingface
 TORCH_HOME=/root/.cache/torch
+
+# Motion Dataset Configuration (for Deep Motion Editing retargeting)
+MOTION_DATASET_URL=https://drive.google.com/uc?id=YOUR_FILE_ID&export=download
+MOTION_DATASET_CHECKSUM=  # Optional SHA256 checksum for verification
+MOTION_CACHE_DIR=/app/motion_cache
+
+# Deep Motion Editing Worker Configuration
+DME_TIMEOUT_SECONDS=90
+MAX_RETARGETING_CONCURRENT=1
+```
+
+**Motion Dataset Setup:**
+
+The motion dataset is required for animation retargeting features. If `MOTION_DATASET_URL` is not set, retargeting will be disabled but basic rigging will still work.
+
+1. Obtain the preprocessed motion dataset URL (Google Drive or direct link)
+2. Set `MOTION_DATASET_URL` in your `.env` file
+3. Optionally set `MOTION_DATASET_CHECKSUM` for integrity verification
+4. On first startup, the dataset (~5-10GB) will be automatically downloaded to the `motion_cache` volume
+5. Subsequent startups will use the cached dataset
+
+To manually pre-populate the motion cache:
+```bash
+# Download dataset locally
+wget -O motion_dataset.tar.gz <your-dataset-url>
+
+# Extract to motion_cache volume
+docker compose run --rm -v $(pwd):/source backend \
+  tar -xzf /source/motion_dataset.tar.gz -C /app/motion_cache/
 ```
 
 ### Configuration File
@@ -222,7 +251,9 @@ celery:
 ### Docker Volumes
 
 - **model_cache**: UniRig model checkpoints (~5GB)
+- **motion_cache**: Deep Motion Editing preprocessed motion dataset (~5-10GB)
 - **redis_data**: Job queue and results
+- **db_data**: SQLite database files
 
 ### Host Directories
 
@@ -233,8 +264,17 @@ celery:
 
 **Backup volumes:**
 ```bash
+# Backup model cache
 docker run --rm -v unirig_model_cache:/data -v $(pwd):/backup \
   alpine tar czf /backup/model_cache_backup.tar.gz /data
+
+# Backup motion cache (optional - can be re-downloaded)
+docker run --rm -v unirig_motion_cache:/data -v $(pwd):/backup \
+  alpine tar czf /backup/motion_cache_backup.tar.gz /data
+
+# Backup database
+docker run --rm -v unirig_db_data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/db_backup.tar.gz /data
 ```
 
 **Restore volumes:**

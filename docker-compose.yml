@@ -29,11 +29,15 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - model_cache:/root/.cache/huggingface
       - db_data:/app/db_data
+      - motion_cache:/app/motion_cache
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DATABASE_PATH=/app/db_data/unirig_ui.db
+      - MOTION_CACHE_DIR=/app/motion_cache
+      - MOTION_DATASET_URL=${MOTION_DATASET_URL:-}
+      - MOTION_DATASET_CHECKSUM=${MOTION_DATASET_CHECKSUM:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -75,6 +79,39 @@ services:
     networks:
       - unirig-network
 
+  dme-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dme-worker
+    container_name: unirig-dme-worker
+    volumes:
+      - ./results:/app/results
+      - motion_cache:/app/motion_cache
+      - db_data:/app/db_data
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_PATH=/app/db_data/unirig_ui.db
+      - MOTION_CACHE_DIR=/app/motion_cache
+      - DME_TIMEOUT_SECONDS=90
+      - MAX_RETARGETING_CONCURRENT=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    depends_on:
+      - redis
+      - backend
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - unirig-network
+    restart: unless-stopped
+
   nginx:
     build:
       context: .
@@ -100,6 +137,7 @@ volumes:
   redis_data:
   model_cache:
   db_data:
+  motion_cache:
 
 networks:
   unirig-network:

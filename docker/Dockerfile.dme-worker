@@ -1,0 +1,80 @@
+# Deep Motion Editing Worker Dockerfile
+# Purpose: Containerized service for motion retargeting using Deep Motion Editing framework
+# Requires: NVIDIA GPU with CUDA support
+
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    CONDA_DIR=/opt/conda \
+    PATH=/opt/conda/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    wget \
+    curl \
+    build-essential \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Miniconda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p /opt/conda && \
+    rm ~/miniconda.sh && \
+    conda clean -afy
+
+# Create working directory
+WORKDIR /app
+
+# Clone Deep Motion Editing repository
+# Note: Update URL when actual repository is available
+RUN git clone https://github.com/DeepMotionEditing/deep-motion-editing.git /app/deep-motion-editing || \
+    echo "DME repository not yet cloned - will be configured at runtime"
+
+# Create conda environment for DME
+RUN conda create -n dme python=3.11 -y
+
+# Activate conda environment and install PyTorch with CUDA support
+RUN /bin/bash -c "source activate dme && \
+    conda install -y pytorch=2.3.1 torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia"
+
+# Copy requirements for backend (for Celery integration)
+COPY unirig-ui/backend/requirements.txt /app/requirements.txt
+
+# Install Python dependencies in conda environment
+RUN /bin/bash -c "source activate dme && \
+    pip install --no-cache-dir -r /app/requirements.txt"
+
+# Install additional dependencies for motion processing
+RUN /bin/bash -c "source activate dme && \
+    pip install --no-cache-dir \
+    numpy \
+    scipy \
+    matplotlib \
+    trimesh \
+    scikit-learn"
+
+# Set up volumes for motion cache and results
+VOLUME ["/app/motion_cache", "/app/results", "/app/db_data"]
+
+# Copy backend application code
+COPY unirig-ui/backend /app/backend
+
+# Set Python path
+ENV PYTHONPATH=/app/backend:$PYTHONPATH
+
+# Healthcheck - verify conda environment and GPU access
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD /bin/bash -c "source activate dme && python -c 'import torch; assert torch.cuda.is_available()'" || exit 1
+
+# Entrypoint: Activate conda environment and start Celery worker
+ENTRYPOINT ["/bin/bash", "-c", "source activate dme && celery -A app.celery_app worker -Q dme-retargeting --loglevel=info --concurrency=1"]

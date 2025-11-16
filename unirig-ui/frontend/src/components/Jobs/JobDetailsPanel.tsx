@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { ModelViewer } from '../Viewer/ModelViewer';
+import { ViewerErrorBoundary } from '../Viewer/ViewerErrorBoundary';
 import { getJob } from '../../services/api';
+import { downloadFile } from '../../utils/downloadFile';
 import type { Job, JobStage } from '../../types';
 
 interface JobDetailsPanelProps {
@@ -25,6 +27,11 @@ export const JobDetailsPanel: React.FC<JobDetailsPanelProps> = ({
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Download state
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const fetchJobDetails = useCallback(async () => {
     if (!jobId) return;
@@ -63,19 +70,43 @@ export const JobDetailsPanel: React.FC<JobDetailsPanelProps> = ({
     return () => clearInterval(interval);
   }, [job, jobId, fetchJobDetails]);
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!job || !job.results?.final_file) return;
 
-    // Construct download URL
-    const downloadUrl = `/results/${job.session_id}/${job.results.final_file}`;
-    
-    // Create temporary anchor element to trigger download
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = job.results.final_file;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Reset download state
+    setDownloading(true);
+    setDownloadProgress(0);
+    setDownloadError(null);
+
+    try {
+      // Construct download URL
+      const downloadUrl = `/results/${job.session_id}/${job.results.final_file}`;
+      
+      // Use downloadFile utility with progress tracking
+      await downloadFile(downloadUrl, job.results.final_file, {
+        onProgress: (progress) => {
+          setDownloadProgress(progress.percentage);
+        },
+        onComplete: () => {
+          setDownloading(false);
+          setDownloadProgress(100);
+          // Reset progress after 2 seconds
+          setTimeout(() => {
+            setDownloadProgress(0);
+          }, 2000);
+        },
+        onError: (error) => {
+          setDownloadError(error.message || 'Download failed');
+          setDownloading(false);
+          setDownloadProgress(0);
+        },
+      });
+    } catch (error: any) {
+      // Handle any uncaught errors
+      setDownloadError(error.message || 'Failed to download model');
+      setDownloading(false);
+      setDownloadProgress(0);
+    }
   };
 
   const handleRetry = async () => {
@@ -382,11 +413,14 @@ export const JobDetailsPanel: React.FC<JobDetailsPanelProps> = ({
               3D Preview
             </h3>
             <div className="rounded-lg overflow-hidden border border-gray-300">
-              <ModelViewer 
-                modelUrl={modelUrl} 
-                showGrid={true}
-                modelFileSize={job.file_size}
-              />
+              <ViewerErrorBoundary modelUrl={modelUrl}>
+                <ModelViewer 
+                  modelUrl={modelUrl} 
+                  jobId={job.job_id}
+                  showGrid={true}
+                  modelFileSize={job.file_size}
+                />
+              </ViewerErrorBoundary>
             </div>
           </div>
         )}
@@ -394,6 +428,51 @@ export const JobDetailsPanel: React.FC<JobDetailsPanelProps> = ({
 
       {/* Footer with Actions */}
       <div className="border-t border-gray-200 p-4 bg-gray-50">
+        {/* Download Error Message */}
+        {downloadError && (
+          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-start space-x-2">
+            <svg
+              className="w-5 h-5 flex-shrink-0 mt-0.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <div className="flex-1">
+              <p className="font-semibold">Download Failed</p>
+              <p className="mt-1">{downloadError}</p>
+              <button
+                onClick={() => setDownloadError(null)}
+                className="mt-2 text-xs underline hover:no-underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Download Progress Bar */}
+        {downloading && downloadProgress > 0 && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between text-sm text-gray-700 mb-1">
+              <span>Downloading...</span>
+              <span>{downloadProgress}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-end space-x-3">
           {job.status === 'failed' && (
             <button
@@ -420,22 +499,36 @@ export const JobDetailsPanel: React.FC<JobDetailsPanelProps> = ({
           {job.status === 'completed' && job.results?.final_file && (
             <button
               onClick={handleDownload}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex items-center space-x-2"
+              disabled={downloading}
+              className={`px-4 py-2 rounded transition-colors flex items-center space-x-2 ${
+                downloading
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              } text-white`}
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                />
-              </svg>
-              <span>Download Model</span>
+              {downloading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Downloading...</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                    />
+                  </svg>
+                  <span>Download Model</span>
+                </>
+              )}
             </button>
           )}
 

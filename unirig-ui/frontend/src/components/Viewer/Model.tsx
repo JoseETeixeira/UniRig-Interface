@@ -157,9 +157,36 @@ export function Model({ url, onLoad, onError, onProgress, onAnimationsLoaded, lo
       handleProgress,
       (error) => {
         console.error('Error loading model:', error);
-        const errorObj = error instanceof Error 
-          ? error 
-          : new Error(`Failed to load model from ${url}`);
+        
+        // Enhance error message with more context
+        let errorMessage = 'Failed to load model';
+        
+        if (error instanceof Error) {
+          const errorText = error.message.toLowerCase();
+          
+          // Network errors
+          if (errorText.includes('network') || errorText.includes('fetch')) {
+            errorMessage = 'Network error: Unable to download the model file. Please check your internet connection.';
+          }
+          // 404 errors
+          else if (errorText.includes('404') || errorText.includes('not found')) {
+            errorMessage = 'Model file not found. The file may have been deleted or moved.';
+          }
+          // Parse errors
+          else if (errorText.includes('parse') || errorText.includes('invalid')) {
+            errorMessage = 'Failed to parse model file. The file may be corrupted or in an unsupported format.';
+          }
+          // Memory errors
+          else if (errorText.includes('memory') || errorText.includes('heap')) {
+            errorMessage = 'Out of memory: The model is too large to load. Try using the simplified loading option.';
+          }
+          // Generic error with original message
+          else {
+            errorMessage = `Failed to load model: ${error.message}`;
+          }
+        }
+        
+        const errorObj = new Error(errorMessage);
         onError?.(errorObj);
       }
     );

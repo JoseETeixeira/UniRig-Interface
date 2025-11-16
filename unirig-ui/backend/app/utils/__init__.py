@@ -12,12 +12,17 @@ from app.utils.errors import (
     InvalidFormatError,
     FileSizeExceededError
 )
+from app.utils.skeleton_extractor import SkeletonExtractor
+from app.utils.skeleton_compatibility import SkeletonCompatibilityChecker, check_skeleton_compatibility
 
 __all__ = [
     "UniRigException",
     "FileValidationError",
     "JobNotFoundError",
     "SessionNotFoundError",
+    "SkeletonExtractor",
+    "SkeletonCompatibilityChecker",
+    "check_skeleton_compatibility",
     "ProcessingError",
     "InvalidFormatError",
     "FileSizeExceededError"

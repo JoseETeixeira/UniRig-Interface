@@ -4,6 +4,10 @@ import type {
   UploadResponse,
   HealthResponse,
   ErrorResponse,
+  MotionClip,
+  MotionClipsResponse,
+  DatasetStatus,
+  RefreshDatasetResponse,
 } from '../types';
 
 // Create axios instance with base configuration
@@ -187,4 +191,95 @@ export const checkHealth = async (): Promise<HealthResponse> => {
   return response.data;
 };
 
+/**
+ * Fetch motion clips from dataset
+ */
+export const getMotionClips = async (params?: {
+  skeletonType?: 'humanoid' | 'quadruped' | 'other';
+  tags?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<MotionClipsResponse> => {
+  const response = await api.get<MotionClipsResponse>('/motion-clips', { params });
+  return response.data;
+};
+
+/**
+ * Request motion retargeting from a motion clip to a rigged model
+ */
+export const requestMotionRetargeting = async (
+  jobId: string,
+  motionClipId: string
+): Promise<{
+  retargetingJobId: string;
+  status: string;
+  estimatedTime: number;
+}> => {
+  const response = await api.post('/retarget-motion', {
+    jobId,
+    motionClipId,
+  });
+  return response.data;
+};
+
+/**
+ * Get retargeting job status
+ */
+export const getRetargetingJobStatus = async (
+  retargetingJobId: string
+): Promise<{
+  id: string;
+  jobId: string;
+  motionClipId: string;
+  status: string;
+  progress: number;
+  resultPath?: string;
+  error?: string;
+  skeletonCompatibility?: Record<string, unknown>;
+  processingTime?: number;
+  createdAt: string;
+  completedAt?: string;
+}> => {
+  const response = await api.get(`/retarget-motion/${retargetingJobId}`);
+  return response.data;
+};
+
+/**
+ * Save a retargeted animation by merging it into the main model file
+ */
+export const saveRetargetedAnimation = async (
+  jobId: string,
+  retargetingJobId: string,
+  animationName?: string
+): Promise<{
+  message: string;
+  modelPath: string;
+  animationName: string;
+}> => {
+  const response = await api.post(`/jobs/${jobId}/save-animation`, {
+    retargetingJobId,
+    animationName,
+  });
+  return response.data;
+};
+
+/**
+ * Get motion dataset status including download progress and integrity
+ */
+export const getDatasetStatus = async (): Promise<DatasetStatus> => {
+  const response = await api.get<DatasetStatus>('/motion-dataset/status');
+  return response.data;
+};
+
+/**
+ * Trigger motion dataset refresh/download
+ */
+export const refreshDataset = async (force: boolean = false): Promise<RefreshDatasetResponse> => {
+  const response = await api.post<RefreshDatasetResponse>('/admin/motion-dataset/refresh', {
+    force,
+  });
+  return response.data;
+};
+
 export default api;
+
