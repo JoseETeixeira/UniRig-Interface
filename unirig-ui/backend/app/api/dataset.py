@@ -89,13 +89,11 @@ class IntegrityCheckResponse(BaseModel):
 # Endpoints
 
 @router.get("/motion-dataset/status", response_model=DatasetStatusResponse)
-async def get_dataset_status(
-    session_id: str = Depends(get_current_session_id)
-):
+async def get_dataset_status():
     """
     Get motion dataset download and integrity status.
     
-    **Authentication**: Session cookie required
+    **Authentication**: None required (public endpoint)
     
     **Returns**:
     - Dataset existence status
@@ -105,7 +103,6 @@ async def get_dataset_status(
     
     **Status Codes**:
     - 200: Success
-    - 401: Unauthorized (no session)
     - 500: Server error
     """
     try:

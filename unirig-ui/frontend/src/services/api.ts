@@ -4,7 +4,6 @@ import type {
   UploadResponse,
   HealthResponse,
   ErrorResponse,
-  MotionClip,
   MotionClipsResponse,
   DatasetStatus,
   RefreshDatasetResponse,

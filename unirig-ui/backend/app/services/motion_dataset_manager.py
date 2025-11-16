@@ -371,7 +371,7 @@ class MotionDatasetManager:
         logger.info("Starting motion dataset indexing...")
         
         try:
-            from app.models.motion_clip import MotionClip
+            from app.db.models import MotionClip
             
             # Find all motion files in cache directory
             motion_files = []

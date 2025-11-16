@@ -140,7 +140,7 @@ async def startup_event():
                 
                 # Check if index needs to be built/rebuilt
                 from app.db.database import SessionLocal
-                from app.models.motion_clip import MotionClip
+                from app.db.models import MotionClip
                 db = SessionLocal()
                 try:
                     clip_count = db.query(MotionClip).count()

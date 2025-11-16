@@ -79,11 +79,15 @@ export const JobDetailsPanel: React.FC<JobDetailsPanelProps> = ({
     setDownloadError(null);
 
     try {
-      // Construct download URL
-      const downloadUrl = `/results/${job.session_id}/${job.results.final_file}`;
+      // Construct download URL using the API endpoint
+      const downloadUrl = `/api/download/${job.job_id}?type=final`;
+      
+      // Create a filename from the original file
+      const baseFilename = job.filename.replace(/\.[^/.]+$/, '');
+      const downloadFilename = `${baseFilename}_rigged.glb`;
       
       // Use downloadFile utility with progress tracking
-      await downloadFile(downloadUrl, job.results.final_file, {
+      await downloadFile(downloadUrl, downloadFilename, {
         onProgress: (progress) => {
           setDownloadProgress(progress.percentage);
         },

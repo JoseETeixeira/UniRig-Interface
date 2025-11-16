@@ -40,6 +40,10 @@ WORKDIR /app
 RUN git clone https://github.com/DeepMotionEditing/deep-motion-editing.git /app/deep-motion-editing || \
     echo "DME repository not yet cloned - will be configured at runtime"
 
+# Accept conda Terms of Service
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
 # Create conda environment for DME
 RUN conda create -n dme python=3.11 -y
 
