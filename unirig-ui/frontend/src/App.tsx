@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { ErrorBoundary, Header, Footer } from './components/Layout';
 import { Modal, Button, NotificationProvider } from './components/Common';
 import { SettingsView } from './components/Settings';
-import { UploadView, JobsView } from './views';
+import { UploadView, JobsView, AdminView } from './views';
 import { useSession } from './hooks/useSession';
 
-type View = 'upload' | 'jobs' | 'settings';
+type View = 'upload' | 'jobs' | 'settings' | 'admin';
 
 /**
  * Main application component
@@ -58,6 +58,10 @@ function App() {
           case '3':
             event.preventDefault();
             setCurrentView('settings');
+            break;
+          case '4':
+            event.preventDefault();
+            setCurrentView('admin');
             break;
         }
       }
@@ -262,6 +266,8 @@ const ViewRenderer: React.FC<ViewRendererProps> = ({ view, sessionId }) => {
       return <JobsView sessionId={sessionId} />;
     case 'settings':
       return <SettingsView />;
+    case 'admin':
+      return <AdminView />;
     default:
       return <div>Unknown view</div>;
   }

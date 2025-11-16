@@ -1,8 +1,8 @@
 import React from 'react';
 
 interface HeaderProps {
-  currentView: 'upload' | 'jobs' | 'settings';
-  onNavigate: (view: 'upload' | 'jobs' | 'settings') => void;
+  currentView: 'upload' | 'jobs' | 'settings' | 'admin';
+  onNavigate: (view: 'upload' | 'jobs' | 'settings' | 'admin') => void;
 }
 
 /**
@@ -13,6 +13,7 @@ export const Header: React.FC<HeaderProps> = ({ currentView, onNavigate }) => {
     { id: 'upload' as const, label: 'Upload', icon: '📤' },
     { id: 'jobs' as const, label: 'Jobs', icon: '📋' },
     { id: 'settings' as const, label: 'Settings', icon: '⚙️' },
+    { id: 'admin' as const, label: 'Admin', icon: '🔧' },
   ];
 
   return (
